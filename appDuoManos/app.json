@@ -33,7 +33,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O DuoManos usa a câmera para reconhecer sinais de Libras."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
