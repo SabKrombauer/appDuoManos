@@ -44,8 +44,14 @@ def extrair_pontos(resultado):
 
 
 def main():
-    if not MODEL_PATH.exists():
+    if not MODEL_PATH.is_file():
         raise FileNotFoundError(f"Modelo MediaPipe nao encontrado: {MODEL_PATH}")
+    tamanho = MODEL_PATH.stat().st_size
+    if tamanho < 100_000:
+        raise RuntimeError(
+            f"hand_landmarker.task parece incompleto ({tamanho} bytes). "
+            "Copie novamente o arquivo verdadeiro da pasta antiga do DuoManos."
+        )
     rotulo = input("Nome do sinal (ex.: oi, trabalhar): ").strip().lower()
     if not rotulo:
         raise ValueError("Nome do sinal vazio")
@@ -54,7 +60,7 @@ def main():
     print("Pressione ESPACO para gravar; Q para sair. Grave varias execucoes de cada sinal.")
 
     options = vision.HandLandmarkerOptions(
-        base_options=python.BaseOptions(model_asset_path=str(MODEL_PATH)),
+        base_options=python.BaseOptions(model_asset_buffer=MODEL_PATH.read_bytes()),
         num_hands=2,
         min_hand_detection_confidence=0.7,
         min_hand_presence_confidence=0.7,
