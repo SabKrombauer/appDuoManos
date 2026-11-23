@@ -4,6 +4,7 @@ Execute: python -m uvicorn api:app --host 0.0.0.0 --port 8000
 Nao exponha este servidor diretamente na internet.
 """
 from pathlib import Path
+import os
 from threading import Lock
 import pickle
 
@@ -11,6 +12,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
@@ -38,6 +40,18 @@ detector = vision.HandLandmarker.create_from_options(options)
 detector_lock = Lock()
 
 app = FastAPI(title="DuoManos - API local de Libras")
+# Para desenvolvimento local: origens permitidas podem ser configuradas via CORS_ORIGINS.
+origens = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:3000,http://127.0.0.1:3000",
+).split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origem.strip() for origem in origens if origem.strip()],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 def normalizar_duas_maos(hand_landmarks, handedness_list):
