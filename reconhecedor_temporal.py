@@ -25,7 +25,7 @@ class ReconhecedorTemporal:
         self.ultimo_acesso = {}
         self.lock = Lock()
 
-    def adicionar(self, sessao, pontos):
+    def adicionar(self, sessao, pontos, permitir_parado=False):
         """Devolve (resultado, progresso 0..24).
 
         resultado e None quando nao existe janela/movimento/confianca suficiente.
@@ -88,7 +88,7 @@ class ReconhecedorTemporal:
                 np.sum(np.linalg.norm(np.diff(pulso_esq, axis=0), axis=1))
                 + np.sum(np.linalg.norm(np.diff(pulso_dir, axis=0), axis=1))
             )
-            if movimento < 0.12:
+            if movimento < 0.12 and not permitir_parado:
                 return None, STEPS
 
             deltas = np.diff(frames, axis=0, prepend=frames[:1])
