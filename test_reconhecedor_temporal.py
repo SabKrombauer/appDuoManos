@@ -43,6 +43,21 @@ class TesteReconhecedorTemporal(unittest.TestCase):
         self.assertIsNone(resultado)
         self.assertIsNone(modelo.ultima_entrada)
 
+    def test_duas_maos_estaticas_podem_ser_classificadas_quando_preciso(self):
+        modelo = ModeloFalso()
+        reconhecedor = ReconhecedorTemporal(modelo)
+        for i in range(28):
+            pontos = np.zeros(132, dtype=np.float32)
+            pontos[65] = 1.0
+            pontos[131] = 1.0
+            pontos[63] = 0.4
+            pontos[129] = 0.65
+            with patch("reconhecedor_temporal.time.monotonic", return_value=100 + i / 12):
+                resultado, _ = reconhecedor.adicionar(
+                    "camera-2", pontos, permitir_parado=True
+                )
+        self.assertEqual(resultado["sinal"], "oi")
+
     def test_sessoes_invalidas_sao_rejeitadas(self):
         resultado, progresso = ReconhecedorTemporal(ModeloFalso()).adicionar(
             "uma sessao com espacos", np.zeros(132, dtype=np.float32)
