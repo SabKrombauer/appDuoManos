@@ -56,8 +56,10 @@ O modelo estatico `modelo_libras.pkl` continua sendo usado como alternativa.
 A API recebe `sessao` no mesmo POST `/reconhecer`, preserva ate aproximadamente
 2 segundos de landmarks por sessao, reamostra 24 quadros (132 dados por quadro)
 e aplica exatamente as caracteristicas do treinamento (posicoes + deslocamentos).
-Para reduzir falsos positivos, so prioriza a previsao temporal quando as maos
-se movimentaram o suficiente e a confianca do modelo for pelo menos 78%.
+Para reduzir falsos positivos, so prioriza a previsao temporal com confianca
+de pelo menos 78%, normalmente exigindo movimento das maos. Tambem permite
+testar configuracoes paradas de duas maos quando o classificador antigo nao
+as reconhece com confianca, ou quando o modelo antigo esta ausente.
 
 O `GET /saude` informa quais modelos estao carregados:
 
