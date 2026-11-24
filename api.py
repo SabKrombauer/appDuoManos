@@ -141,7 +141,12 @@ async def reconhecer(
     progresso = 0
     if reconhecedor_temporal is not None and sessao:
         pontos = extrair_pontos(resultado)
-        previsao, progresso = reconhecedor_temporal.adicionar(sessao, pontos)
+        previsao, progresso = reconhecedor_temporal.adicionar(
+            sessao, pontos,
+            permitir_parado=(modelo is None or (
+                detectadas >= 2 and (sinal is None or confianca < 0.72)
+            )),
+        )
         if previsao is not None:
             sinal = previsao["sinal"]
             confianca = previsao["confianca"]
