@@ -11,7 +11,9 @@ import pickle
 import cv2
 import mediapipe as mp
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from coletar_sequencias import extrair_pontos
+from reconhecedor_temporal import ReconhecedorTemporal
 from fastapi.middleware.cors import CORSMiddleware
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -19,19 +21,33 @@ from mediapipe.tasks.python import vision
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "modelo_libras.pkl"
 LANDMARKER_PATH = BASE_DIR / "hand_landmarker.task"
+TEMPORAL_MODEL_PATH = BASE_DIR / "modelo_sequencias.pkl"
 MAX_BYTES = 5 * 1024 * 1024
 
-if not MODEL_PATH.exists() or not LANDMARKER_PATH.exists():
+if not LANDMARKER_PATH.is_file():
+    raise RuntimeError("Copie hand_landmarker.task para a pasta ao lado de api.py.")
+if not MODEL_PATH.is_file() and not TEMPORAL_MODEL_PATH.is_file():
     raise RuntimeError(
-        "Arquivos modelo_libras.pkl e hand_landmarker.task devem estar ao lado de api.py"
+        "Nenhum modelo encontrado: copie modelo_libras.pkl ou execute treinar_sequencias.py "
+        "para criar modelo_sequencias.pkl."
     )
 
-# Arquivos pickle executam codigo ao carregar: use somente o modelo treinado por voce.
-with MODEL_PATH.open("rb") as arquivo:
-    modelo = pickle.load(arquivo)
+# Arquivos pickle podem executar codigo ao carregar: carregue somente modelos seus.
+modelo = None
+if MODEL_PATH.is_file():
+    with MODEL_PATH.open("rb") as arquivo:
+        modelo = pickle.load(arquivo)
+
+modelo_temporal = None
+if TEMPORAL_MODEL_PATH.is_file():
+    with TEMPORAL_MODEL_PATH.open("rb") as arquivo:
+        modelo_temporal = pickle.load(arquivo)
+reconhecedor_temporal = (
+    ReconhecedorTemporal(modelo_temporal) if modelo_temporal is not None else None
+)
 
 options = vision.HandLandmarkerOptions(
-    base_options=python.BaseOptions(model_asset_path=str(LANDMARKER_PATH)),
+    base_options=python.BaseOptions(model_asset_buffer=LANDMARKER_PATH.read_bytes()),
     num_hands=2,
     min_hand_detection_confidence=0.7,
     min_hand_presence_confidence=0.7,
@@ -74,11 +90,18 @@ def normalizar_duas_maos(hand_landmarks, handedness_list):
 
 @app.get("/saude")
 def saude():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "modelo_estatico": modelo is not None,
+        "modelo_temporal": reconhecedor_temporal is not None,
+    }
 
 
 @app.post("/reconhecer")
-async def reconhecer(imagem: UploadFile = File(...)):
+async def reconhecer(
+    imagem: UploadFile = File(...),
+    sessao: str = Form(""),
+):
     if imagem.content_type not in {"image/jpeg", "image/png"}:
         raise HTTPException(status_code=415, detail="Envie uma imagem JPEG ou PNG.")
 
@@ -100,19 +123,40 @@ async def reconhecer(imagem: UploadFile = File(...)):
     # O detector e compartilhado entre requisicoes; evitar acesso simultaneo.
     with detector_lock:
         resultado = detector.detect(imagem_mp)
-        if not resultado.hand_landmarks:
-            return {"sinal": None, "confianca": 0.0, "maos_detectadas": 0}
 
+    sinal = None
+    confianca = 0.0
+    modo = "estatico"
+    detectadas = len(resultado.hand_landmarks)
+
+    if detectadas and modelo is not None:
         vetor = normalizar_duas_maos(
             resultado.hand_landmarks, resultado.handedness
         ).reshape(1, -1)
         sinal = str(modelo.predict(vetor)[0])
         confianca = float(np.max(modelo.predict_proba(vetor)[0]))
+        if sinal.lower() == "desconhecido":
+            sinal, confianca = None, 0.0
 
-    if sinal.lower() == "desconhecido":
-        sinal = None
+    progresso = 0
+    if reconhecedor_temporal is not None and sessao:
+        pontos = extrair_pontos(resultado)
+        previsao, progresso = reconhecedor_temporal.adicionar(
+            sessao, pontos,
+            permitir_parado=(modelo is None or (
+                detectadas >= 2 and (sinal is None or confianca < 0.72)
+            )),
+        )
+        if previsao is not None:
+            sinal = previsao["sinal"]
+            confianca = previsao["confianca"]
+            modo = "sequencia"
+
     return {
         "sinal": sinal,
         "confianca": round(confianca, 4),
-        "maos_detectadas": len(resultado.hand_landmarks),
+        "maos_detectadas": detectadas,
+        "modo": modo,
+        "temporal_disponivel": reconhecedor_temporal is not None,
+        "progresso_temporal": progresso,
     }

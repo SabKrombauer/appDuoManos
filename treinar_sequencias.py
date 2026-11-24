@@ -32,14 +32,27 @@ for arquivo in sorted(PASTA.glob("*/*.npz")):
 
 contagem = Counter(y)
 print("Amostras por sinal:", dict(contagem))
-if len(contagem) < 2 or min(contagem.values()) < 10:
+
+# Classes ainda com poucos exemplos ficam guardadas em sequencias/ para o
+# proximo treinamento. Nao as inclua como classes com poucos dados: elas
+# impediam o primeiro teste, mesmo com outros sinais suficientes.
+minimo = 10
+incluidas = {rotulo for rotulo, total in contagem.items() if total >= minimo}
+ignoradas = {rotulo: total for rotulo, total in contagem.items() if total < minimo}
+if ignoradas:
+    print("Sinais com menos de 10 gravacoes (serao ignorados neste treino):", ignoradas)
+if len(incluidas) < 2:
     raise SystemExit(
-        "Colete pelo menos 10 sequencias de cada um de 2 ou mais sinais; "
-        "recomendado: 20-40 por sinal e pessoas diferentes."
+        "Ainda nao ha duas classes com pelo menos 10 gravacoes validas cada. "
+        "Grave mais amostras antes de treinar."
     )
 
-X = np.asarray(X, dtype=np.float32)
-y = np.asarray(y)
+indices = [i for i, rotulo in enumerate(y) if rotulo in incluidas]
+X = np.asarray([X[i] for i in indices], dtype=np.float32)
+y = np.asarray([y[i] for i in indices])
+contagem_treino = Counter(y)
+print("Sinais incluidos no treinamento:", dict(contagem_treino))
+print("Total de sequencias utilizadas:", len(y))
 X_treino, X_teste, y_treino, y_teste = train_test_split(
     X, y, test_size=0.25, random_state=42, stratify=y,
 )
@@ -55,7 +68,7 @@ saida = BASE / "modelo_sequencias.pkl"
 with saida.open("wb") as arquivo:
     pickle.dump(modelo, arquivo)
 (BASE / "modelo_sequencias_info.json").write_text(
-    json.dumps({"classes": sorted(contagem), "frames": 24, "features_per_frame": 132},
+    json.dumps({"classes": sorted(contagem_treino), "frames": 24, "features_per_frame": 132},
                ensure_ascii=False, indent=2),
     encoding="utf-8",
 )
